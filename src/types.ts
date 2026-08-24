@@ -1,16 +1,15 @@
 export type NumberSize = 'BIG' | 'SMALL';
 export type NumberColor = 'RED' | 'GREEN' | 'VIOLET' | 'RED+VIOLET' | 'GREEN+VIOLET';
 
-export type AppTheme = 'royal' | 'crimson' | 'purple' | 'emerald' | 'rose' | 'ocean' | 'quantum';
-
 export interface PredictionResult {
-  periodId: string;           // Target upcoming issue period (e.g. 2026082310000891)
+  periodId: string;           // Target upcoming issue period
   size: NumberSize;           // BIG or SMALL
   n1: number;                 // Primary Hot Number (Strictly 5-9 for BIG, 0-4 for SMALL)
   n2: number;                 // Secondary Hot Number (Strictly 5-9 for BIG, 0-4 for SMALL)
   companionNumbers: number[]; // All numbers corresponding strictly to this size (5-9 or 0-4)
   confidence: number;
   patternName: string;
+  levelTarget: 1 | 2 | 3;     // L1 (Standard), L2 (Under 2-Level Recovery), L3 (All Wallet Level)
   level1Score: number;
   level2Score: number;
   bothAgree: boolean;
@@ -33,18 +32,17 @@ export interface GameRecord {
   predictedSize?: NumberSize;
   predictedN1?: number;
   predictedN2?: number;
+  levelPlayed?: 1 | 2 | 3;
   resultStatus?: 'WIN' | 'LOSS' | 'JACKPOT' | 'WAITING';
   isJackpot?: boolean;
   timeStr?: string;
 }
 
-export interface LiveStats {
-  wins: number;
+export interface LevelStats {
+  l1Wins: number;
+  l2Wins: number;
+  l3Wins: number;
+  totalWins: number;
   losses: number;
-  jackpots: number;
-  total: number;
-  winRate: number;
-  streak: number;
-  maxStreak: number;
-  currentLevel: number;
+  under2LevelRate: number;
 }
