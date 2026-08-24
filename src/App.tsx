@@ -7,72 +7,63 @@ import {
   getNumberSize,
   ApiDrawItem
 } from './utils/engine';
-import { GameRecord, PredictionResult, NumberSize } from './types';
+import { GameRecord, PredictionResult } from './types';
 import { sound } from './utils/audio';
 import {
   Flame,
   Snowflake,
   Volume2,
   VolumeX,
-  Globe,
-  Radio,
   Clock,
   CheckCircle2,
   XCircle,
-  Trophy,
   History,
-  Zap,
   ShieldCheck,
-  Sparkles,
-  Activity,
-  Layers,
   Crown,
-  Wallet,
+  Gamepad2,
+  ArrowLeft,
+  ExternalLink,
+  Sparkles,
+  Layers,
+  Home,
   AlertTriangle,
-  FlameKindling
+  RotateCcw,
+  Zap,
+  Wallet
 } from 'lucide-react';
 
-export default function App() {
-  const [lang, setLang] = useState<'hi' | 'en'>('hi');
-  const [soundEnabled, setSoundEnabled] = useState(true);
+const GAME_URL = 'https://bdgwinmy.cc//#/register?invitationCode=8261315097340';
 
-  // Live Timer & Periods
+export default function App() {
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
+  const [viewMode, setViewMode] = useState<'home' | 'game'>('home');
+
+  // Live Timer & Period
   const [secondsRemaining, setSecondsRemaining] = useState<number>(60);
   const [currentUpcomingPeriod, setCurrentUpcomingPeriod] = useState<string>('');
   
-  // Strict Under 2-Level Engine State (L1, L2, L3 ALL WALLET)
+  // Under 2-Level Recovery State (L1, L2, L3)
   const [currentLevel, setCurrentLevel] = useState<1 | 2 | 3>(1);
 
   // Real-time Prediction
   const [prediction, setPrediction] = useState<PredictionResult | null>(null);
   const [isCalculating, setIsCalculating] = useState<boolean>(false);
 
-  // Live History Records (Strictly verified live draws)
+  // Live Verified History
   const [history, setHistory] = useState<GameRecord[]>([]);
-  const [outcomeAlert, setOutcomeAlert] = useState<{ status: 'WIN' | 'LOSS' | 'JACKPOT'; record: GameRecord; levelWon: 1 | 2 | 3 } | null>(null);
-  const [allWalletAlert, setAllWalletAlert] = useState<boolean>(false);
 
-  // Scoreboard: L1 Direct Wins, L2 2-Level Wins, L3 All Wallet Wins, Losses
-  const [l1Wins, setL1Wins] = useState<number>(0);
-  const [l2Wins, setL2Wins] = useState<number>(0);
-  const [l3Wins, setL3Wins] = useState<number>(0);
-  const [lossCount, setLossCount] = useState<number>(0);
-  const [streak, setStreak] = useState<number>(0);
-  const [jackpotCount, setJackpotCount] = useState<number>(0);
-
-  // Active prediction storage across rounds
+  // Refs for state persistence across rounds
   const lastDrawnIssueRef = useRef<string>('');
   const predictedMapRef = useRef<Record<string, { pred: PredictionResult; level: 1 | 2 | 3 }>>({});
   const activePredictionRef = useRef<{ pred: PredictionResult; level: 1 | 2 | 3 } | null>(null);
   const latestApiListRef = useRef<ApiDrawItem[]>([]);
   const levelRef = useRef<1 | 2 | 3>(1);
 
-  // Sync ref
   useEffect(() => {
     levelRef.current = currentLevel;
   }, [currentLevel]);
 
-  // 1. Initial Live Sync on Mount
+  // Initial Sync on Mount
   const initializeLiveSync = async () => {
     setIsCalculating(true);
     try {
@@ -85,23 +76,21 @@ export default function App() {
         lastDrawnIssueRef.current = lastIssue;
       }
 
-      // Compute exact upcoming period
       const nextPeriod = getNextPeriodId(lastIssue);
       setCurrentUpcomingPeriod(nextPeriod);
 
-      // Generate Under 2-Level prediction
       const pred = computeUpcomingPrediction(nextPeriod, apiList, levelRef.current);
       setPrediction(pred);
       activePredictionRef.current = { pred, level: levelRef.current };
       predictedMapRef.current[nextPeriod] = { pred, level: levelRef.current };
     } catch (e) {
-      console.error('Initialization sync error:', e);
+      console.error('Initialization error:', e);
     } finally {
       setIsCalculating(false);
     }
   };
 
-  // 2. High-Precision Real-time Loop (Every 1000ms)
+  // Real-time 1-second countdown & live draw check
   useEffect(() => {
     initializeLiveSync();
 
@@ -111,12 +100,12 @@ export default function App() {
       const remaining = 60 - currentSec;
       setSecondsRemaining(remaining);
 
-      // Sound warning in final 3 seconds
+      // Final 3 seconds tick sound
       if (soundEnabled && remaining <= 3 && remaining > 0) {
         sound.playCriticalTick();
       }
 
-      // Exact Draw Moment & Result Check:
+      // Draw sync at exact key seconds
       if (remaining === 59 || remaining === 56 || remaining === 53 || remaining === 50 || remaining === 45) {
         try {
           const freshList = await fetchLiveWinGoHistory();
@@ -125,13 +114,12 @@ export default function App() {
             const latestDrawn = freshList[0];
             const latestIssue = latestDrawn.issueNumber;
 
-            // If a new official result has been published
+            // When new official result is published
             if (latestIssue && latestIssue !== lastDrawnIssueRef.current) {
               const actualNumber = parseInt(latestDrawn.number, 10);
               const actualSize = getNumberSize(actualNumber);
               const actualColor = getNumberColor(actualNumber);
 
-              // Retrieve prediction and level used for this round
               const recordedEntry = predictedMapRef.current[latestIssue] || activePredictionRef.current;
               const recordedPred = recordedEntry?.pred;
               const roundLevel = recordedEntry?.level ?? levelRef.current;
@@ -140,7 +128,6 @@ export default function App() {
               let isJackpot = false;
 
               if (recordedPred) {
-                // Exact Number Jackpot Hit
                 if (actualNumber === recordedPred.n1 || actualNumber === recordedPred.n2) {
                   isJackpot = true;
                   isWin = true;
@@ -154,47 +141,22 @@ export default function App() {
               const status = isJackpot ? 'JACKPOT' : isWin ? 'WIN' : 'LOSS';
               let nextLevel: 1 | 2 | 3 = 1;
 
-              // ════════════════════════════════════════════════════════════════
-              // UNDER 2-LEVEL WIN & ALL-WALLET LEVEL 3 ENGINE
-              // ════════════════════════════════════════════════════════════════
+              // Recovery Level Escalation & Reset Logic
               if (isWin) {
-                if (roundLevel === 1) {
-                  setL1Wins((prev) => prev + 1);
-                } else if (roundLevel === 2) {
-                  setL2Wins((prev) => prev + 1); // 2-Level Win Hit!
-                } else {
-                  setL3Wins((prev) => prev + 1); // Level 3 All Wallet Hit!
-                }
-
-                if (isJackpot) {
-                  setJackpotCount((prev) => prev + 1);
-                }
-
-                setStreak((prev) => prev + 1);
-                nextLevel = 1; // Instant Reset back to Level 1
+                nextLevel = 1; // Instant reset to Level 1
                 setCurrentLevel(1);
-
-                if (soundEnabled) {
-                  if (isJackpot) sound.playJackpotFanfare();
-                  else sound.playWinFanfare();
-                }
+                if (soundEnabled) sound.playWinFanfare();
               } else {
-                // ROUND MISSED: Escalate to Level 2 or Level 3
-                setStreak(0);
                 if (roundLevel === 1) {
-                  nextLevel = 2; // Enter Level 2 (Under 2-Level Recovery)
+                  nextLevel = 2; // Move to Level 2 (2-Level Win Recovery)
                   setCurrentLevel(2);
                 } else if (roundLevel === 2) {
-                  nextLevel = 3; // Enter Level 3 (ALL WALLET LEVEL)
+                  nextLevel = 3; // Move to Level 3 (All Wallet Level)
                   setCurrentLevel(3);
-                  setAllWalletAlert(true);
-                  setTimeout(() => setAllWalletAlert(false), 5000);
                 } else {
-                  setLossCount((prev) => prev + 1);
-                  nextLevel = 1; // Cycle resets
+                  nextLevel = 1; // Reset cycle
                   setCurrentLevel(1);
                 }
-
                 if (soundEnabled) sound.playLossSound();
               }
 
@@ -209,18 +171,12 @@ export default function App() {
                 levelPlayed: roundLevel,
                 resultStatus: status,
                 isJackpot,
-                timeStr: new Date().toLocaleTimeString()
+                timeStr: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
               };
 
-              // Display outcome alert popup
-              setOutcomeAlert({ status, record: newRecord, levelWon: roundLevel });
-              setTimeout(() => setOutcomeAlert(null), 4000);
-
-              // Add strictly this live verified round to history
               setHistory((prev) => [newRecord, ...prev.slice(0, 29)]);
               lastDrawnIssueRef.current = latestIssue;
 
-              // Immediately compute prediction for NEXT incoming round with nextLevel
               const nextTarget = getNextPeriodId(latestIssue);
               setCurrentUpcomingPeriod(nextTarget);
 
@@ -233,7 +189,7 @@ export default function App() {
             }
           }
         } catch (err) {
-          console.error('Real-time sync error:', err);
+          console.error('Draw sync error:', err);
         }
       }
     }, 1000);
@@ -247,101 +203,125 @@ export default function App() {
   const timeFormatted = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
   const isCritical = secondsRemaining <= 5;
 
-  const totalWins = l1Wins + l2Wins + l3Wins;
-  const under2LevelWins = l1Wins + l2Wins;
-  const totalRounds = totalWins + lossCount;
-  const under2LevelAccuracy = totalRounds > 0 ? ((under2LevelWins / totalRounds) * 100).toFixed(1) : '100.0';
+  // ════════════════════════════════════════════════════════════════
+  // 1. FULL-SCREEN IN-APP GAME PAGE VIEW (WITH LIVE PREDICTION TICKER & HOME BUTTON)
+  // ════════════════════════════════════════════════════════════════
+  if (viewMode === 'game') {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col bg-slate-900 text-slate-100">
+        
+        {/* Top Control Bar in Game Mode */}
+        <header className="w-full bg-white border-b border-slate-200 px-3 sm:px-4 py-2.5 flex items-center justify-between shadow-sm z-10 text-slate-800">
+          
+          {/* Back to Home Button */}
+          <button
+            onClick={() => {
+              sound.playClick();
+              setViewMode('home');
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 active:scale-95 text-slate-900 font-extrabold text-xs sm:text-sm shadow-md transition-all border border-amber-400"
+            id="back-to-home-btn"
+          >
+            <ArrowLeft className="h-4 w-4 stroke-[2.5]" />
+            <Home className="h-4 w-4" />
+            <span>वापस होम पैनल (Home)</span>
+          </button>
 
-  return (
-    <div className="min-h-screen bg-[#03060c] text-slate-100 font-sans antialiased selection:bg-amber-400 selection:text-black">
-      
-      {/* Background Ambience Glow */}
-      <div className="fixed inset-0 pointer-events-none -z-10 overflow-hidden">
-        <div
-          className={`absolute top-0 left-1/2 -translate-x-1/2 h-[420px] w-[560px] rounded-full opacity-20 blur-[130px] transition-all duration-700 ${
-            currentLevel === 3
-              ? 'bg-red-600'
-              : currentLevel === 2
-              ? 'bg-amber-500'
-              : isBig
-              ? 'bg-amber-400'
-              : 'bg-cyan-400'
-          }`}
-        />
-      </div>
-
-      {/* ALL WALLET LEVEL 3 ALERT POPUP */}
-      {allWalletAlert && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-in zoom-in-95 duration-300">
-          <div className="relative max-w-sm w-full rounded-3xl border-2 border-red-500 bg-gradient-to-b from-[#200005] via-[#100002] to-black p-6 text-center shadow-[0_0_80px_rgba(255,0,60,0.6)]">
-            <div className="text-5xl mb-2 animate-bounce">🔥</div>
-            <div className="inline-flex items-center gap-1 bg-red-500/20 border border-red-500/40 px-3 py-1 rounded-full text-red-400 text-xs font-black uppercase mb-2">
-              <AlertTriangle className="h-3.5 w-3.5" /> LEVEL 3 TRIGGERED
-            </div>
-            <h2 className="font-black text-2xl tracking-wider text-red-400 uppercase drop-shadow-[0_0_15px_rgba(255,0,60,0.8)]">
-              ALL WALLET MAXIMUM SURGE!
-            </h2>
-            <p className="text-xs text-red-200/80 font-bold mt-1 uppercase tracking-widest">
-              {lang === 'hi' ? 'लेवल 3 सक्रिय! ऑल वॉलेट मैक्सिमम रिकवरी राउंड!' : 'MAXIMUM ACCURACY FULL WALLET RECOVERY ROUND!'}
-            </p>
-            <div className="my-4 flex items-center justify-center gap-2">
-              <span className="px-4 py-2 rounded-xl bg-red-600 text-white font-mono font-black text-xl shadow-[0_0_30px_rgba(255,0,60,0.8)]">
-                CONFIDENCE: 99.8%
+          {/* Compact Live Prediction Floating Pill */}
+          {prediction && (
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1 rounded-xl bg-slate-100 border border-slate-300 shadow-inner">
+              <span className={`text-[10px] font-black px-1.5 py-0.5 rounded ${
+                currentLevel === 1
+                  ? 'bg-emerald-600 text-white'
+                  : currentLevel === 2
+                  ? 'bg-amber-500 text-slate-950'
+                  : 'bg-rose-600 text-white'
+              }`}>
+                L{currentLevel}
+              </span>
+              <span className="font-mono text-xs font-black text-slate-700">
+                #{prediction.periodId.slice(-4)}:
+              </span>
+              <span className={`font-black text-xs ${isBig ? 'text-amber-600' : 'text-sky-600'}`}>
+                {prediction.size} [{prediction.n1}, {prediction.n2}]
+              </span>
+              <span className={`font-mono text-xs font-bold ${isCritical ? 'text-rose-600 font-black animate-pulse' : 'text-slate-600'}`}>
+                ⏱ {timeFormatted}
               </span>
             </div>
-            <p className="text-xs font-mono font-bold text-amber-300">
-              {lang === 'hi' ? 'इस राउंड के बाद जीत के साथ तुरंत लेवल 1 पर रीसेट होगा' : 'Will reset to Level 1 immediately after WIN'}
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Outcome Instant Notification Banner */}
-      {outcomeAlert && !allWalletAlert && (
-        <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 rounded-2xl border px-5 py-3 shadow-2xl backdrop-blur-xl animate-in slide-in-from-top-4 duration-300 ${
-          outcomeAlert.status === 'WIN' || outcomeAlert.status === 'JACKPOT'
-            ? 'border-emerald-500/80 bg-black/95 text-emerald-400 shadow-[0_0_35px_rgba(0,210,106,0.5)]'
-            : 'border-rose-500/80 bg-black/95 text-rose-400 shadow-[0_0_35px_rgba(255,71,87,0.5)]'
-        }`}>
-          {outcomeAlert.status === 'WIN' || outcomeAlert.status === 'JACKPOT' ? (
-            <Trophy className="h-6 w-6 text-amber-400 animate-bounce" />
-          ) : (
-            <XCircle className="h-6 w-6 text-rose-500 animate-pulse" />
           )}
-          <div>
-            <p className="font-extrabold text-sm flex items-center gap-1.5">
-              <span>
-                {outcomeAlert.status === 'JACKPOT'
-                  ? (lang === 'hi' ? '🎰 JACKPOT! सटीक नंबर पास!' : '🎰 JACKPOT! DIRECT HIT')
-                  : outcomeAlert.status === 'WIN'
-                  ? (lang === 'hi' ? `🎯 WIN! लेवल ${outcomeAlert.levelWon} में पास!` : `🎯 WIN! LEVEL ${outcomeAlert.levelWon} PASSED!`)
-                  : (lang === 'hi' ? '❌ मिस हुआ! अगले लेवल पर जाएं' : '❌ MISSED! MOVING TO NEXT LEVEL')}
-              </span>
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-400 text-black font-black">
-                L{outcomeAlert.levelWon}
-              </span>
-            </p>
-            <p className="text-xs font-mono font-bold text-gray-300">
-              Period #{outcomeAlert.record.periodId.slice(-4)} ➔ {outcomeAlert.record.number} ({outcomeAlert.record.size})
-            </p>
-          </div>
-        </div>
-      )}
 
-      {/* Top Header */}
-      <header className="w-full border-b border-amber-400/20 bg-black/80 px-4 py-3 sticky top-0 z-40 backdrop-blur-xl">
-        <div className="mx-auto max-w-xl flex items-center justify-between">
+          {/* Direct Link External Fallback */}
+          <div className="flex items-center gap-2">
+            <a
+              href={GAME_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-300 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold transition-colors"
+              title="Open direct in new tab"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              <span className="hidden xs:inline">Direct Tab</span>
+            </a>
+          </div>
+        </header>
+
+        {/* Mobile Mini Prediction Strip */}
+        {prediction && (
+          <div className="sm:hidden bg-slate-100 border-b border-slate-200 px-3 py-1.5 flex items-center justify-between text-xs text-slate-800 font-bold shadow-inner">
+            <div className="flex items-center gap-1.5">
+              <span className={`text-[10px] font-black px-1.5 py-0.2 rounded text-white ${
+                currentLevel === 1 ? 'bg-emerald-600' : currentLevel === 2 ? 'bg-amber-600' : 'bg-rose-600'
+              }`}>
+                L{currentLevel}
+              </span>
+              <span className="font-mono text-[11px] font-black text-slate-600">#{prediction.periodId.slice(-4)}</span>
+              <span className={`font-black text-xs ${isBig ? 'text-amber-600' : 'text-sky-600'}`}>
+                ➔ {prediction.size} [{prediction.n1}, {prediction.n2}]
+              </span>
+            </div>
+            <span className={`font-mono text-xs font-black ${isCritical ? 'text-rose-600 animate-pulse' : 'text-slate-700'}`}>
+              ⏱ {timeFormatted}
+            </span>
+          </div>
+        )}
+
+        {/* Full-Screen Embedded Game View */}
+        <div className="relative flex-1 w-full h-full bg-slate-950 overflow-hidden">
+          <iframe
+            src={GAME_URL}
+            title="BDG Win Game Official"
+            className="w-full h-full border-0 bg-white"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  // 2. CLEAN WHITE / LIGHT THEME MAIN PANEL
+  // ════════════════════════════════════════════════════════════════
+  return (
+    <div className="min-h-screen bg-[#f4f6fa] text-slate-800 font-sans antialiased flex flex-col justify-start items-center p-3 sm:p-5 selection:bg-amber-200 selection:text-amber-900">
+      
+      {/* Centered Main Wrapper */}
+      <div className="w-full max-w-md flex flex-col gap-3.5">
+        
+        {/* 1. Header (Clean White Theme) */}
+        <header className="flex items-center justify-between py-2 border-b border-slate-200">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl font-black text-xl bg-gradient-to-tr from-amber-500 via-amber-300 to-yellow-100 text-black shadow-[0_0_20px_rgba(255,215,0,0.4)] border border-amber-300">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-400 text-slate-900 font-black text-base shadow-sm border border-amber-300">
               👑
             </div>
             <div>
-              <h1 className="font-black text-base tracking-wider flex items-center gap-1.5 text-white">
-                KRUSHNA <span className="text-amber-400 drop-shadow-[0_0_10px_rgba(255,215,0,0.5)]">VIP MASTER PANEL</span>
+              <h1 className="text-base font-black tracking-wide text-slate-900 flex items-center gap-1.5">
+                KRUSHNA <span className="text-amber-600">VIP MASTER</span>
               </h1>
-              <span className="text-[10px] font-bold text-amber-300 flex items-center gap-1 tracking-wide">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping" />
-                {lang === 'hi' ? '⚡ अंडर 2-लेवल विन इंजन' : '⚡ UNDER 2-LEVEL WIN GUARANTEE'}
+              <span className="text-[11px] font-bold text-emerald-600 flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Live 1-Minute WinGo Engine
               </span>
             </div>
           </div>
@@ -353,381 +333,269 @@ export default function App() {
                 sound.playClick();
                 setSoundEnabled(!soundEnabled);
               }}
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-amber-500/20 bg-white/5 text-gray-300 hover:text-white transition-colors"
-              title={soundEnabled ? 'Mute' : 'Sound On'}
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 shadow-sm transition-colors"
+              title={soundEnabled ? 'Mute Sound' : 'Enable Sound'}
+              id="sound-toggle-btn"
             >
-              {soundEnabled ? <Volume2 className="h-4 w-4 text-amber-400" /> : <VolumeX className="h-4 w-4 text-gray-500" />}
-            </button>
-
-            {/* Language Toggle */}
-            <button
-              onClick={() => {
-                sound.playClick();
-                setLang(lang === 'hi' ? 'en' : 'hi');
-              }}
-              className="flex items-center gap-1 rounded-lg border border-amber-400/40 bg-amber-400/10 px-2.5 py-1 text-xs font-bold text-amber-300 hover:bg-amber-400/20 transition-all"
-            >
-              <Globe className="h-3 w-3" />
-              <span>{lang === 'hi' ? 'English' : 'हिंदी'}</span>
+              {soundEnabled ? <Volume2 className="h-4 w-4 text-amber-600" /> : <VolumeX className="h-4 w-4 text-slate-400" />}
             </button>
           </div>
-        </div>
-      </header>
+        </header>
 
-      {/* Main Container */}
-      <main className="mx-auto max-w-xl px-4 py-4 flex flex-col gap-4">
-        
-        {/* ════════════════════════════════════════════════════════════════
-            1. UNDER 2-LEVEL STAGE PROGRESSION MONITOR (L1 -> L2 -> L3 WALLET)
-            ════════════════════════════════════════════════════════════════ */}
-        <div className="rounded-2xl border border-amber-400/30 bg-gradient-to-r from-[#0d1222] via-[#090e18] to-black p-4 shadow-[0_0_30px_rgba(0,0,0,0.6)]">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-amber-300">
-              <Layers className="h-4 w-4 text-amber-400" />
-              <span>{lang === 'hi' ? 'अंडर 2-लेवल विन स्टेज' : 'UNDER 2-LEVEL ACTIVE STAGE'}</span>
+        {/* 2. DEDICATED RECOVERY LEVEL VISUAL INDICATOR (L1 / L2 / L3) */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm">
+          <div className="flex items-center justify-between mb-2.5">
+            <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-slate-600">
+              <Layers className="h-3.5 w-3.5 text-amber-500" />
+              <span>Active Recovery Level Indicator</span>
             </div>
-            <span className={`text-[11px] font-mono font-black px-2.5 py-0.5 rounded-full border ${
+            <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${
               currentLevel === 1
-                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                ? 'bg-emerald-100 text-emerald-800'
                 : currentLevel === 2
-                ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 animate-pulse'
-                : 'bg-red-500/20 text-red-300 border-red-500/40 animate-bounce'
+                ? 'bg-amber-100 text-amber-900 font-bold'
+                : 'bg-rose-100 text-rose-800'
             }`}>
-              {currentLevel === 1 && (lang === 'hi' ? '🟢 लेवल 1 (स्टैंडर्ड)' : '🟢 LEVEL 1 (PRIME)')}
-              {currentLevel === 2 && (lang === 'hi' ? '🟡 लेवल 2 (अंडर 2-लेवल रिकवरी)' : '🟡 LEVEL 2 (2-LEVEL RECOVERY)')}
-              {currentLevel === 3 && (lang === 'hi' ? '🔴 लेवल 3 (ऑल वॉलेट लेवल)' : '🔴 LEVEL 3 (ALL WALLET LEVEL)')}
+              {currentLevel === 1 && '🟢 LEVEL 1 ACTIVE'}
+              {currentLevel === 2 && '🟡 LEVEL 2 RECOVERY'}
+              {currentLevel === 3 && '🔴 LEVEL 3 ALL WALLET'}
             </span>
           </div>
 
-          {/* 3-Level Distinct Visual Stages */}
-          <div className="grid grid-cols-3 gap-2.5">
-            {/* Level 1 Card */}
-            <div className={`p-3 rounded-xl border text-center transition-all ${
+          {/* L1 / L2 / L3 Tabs */}
+          <div className="grid grid-cols-3 gap-2">
+            
+            {/* Level 1 Tab */}
+            <div className={`p-2.5 rounded-xl border text-center transition-all ${
               currentLevel === 1
-                ? 'bg-emerald-500/20 border-emerald-400 shadow-[0_0_20px_rgba(0,210,106,0.3)] ring-2 ring-emerald-400/40'
-                : 'bg-black/40 border-white/10 opacity-60'
+                ? 'bg-emerald-50 border-emerald-500 text-emerald-950 ring-2 ring-emerald-400/40 shadow-sm'
+                : 'bg-slate-50 border-slate-200 text-slate-400 opacity-60'
             }`}>
-              <div className="flex items-center justify-center gap-1 text-[10px] font-black uppercase text-gray-400 mb-1">
-                <CheckCircle2 className="h-3 w-3 text-emerald-400" />
+              <div className="text-[10px] font-black uppercase flex items-center justify-center gap-1 mb-0.5">
+                <CheckCircle2 className={`h-3 w-3 ${currentLevel === 1 ? 'text-emerald-600' : 'text-slate-400'}`} />
                 <span>LEVEL 1</span>
               </div>
-              <div className="text-base font-mono font-black text-emerald-400">
+              <div className={`text-xs font-black font-mono ${currentLevel === 1 ? 'text-emerald-700' : 'text-slate-500'}`}>
                 PRIME WIN
               </div>
-              <div className="text-[9px] text-gray-400 mt-0.5">
-                {lang === 'hi' ? '95%+ सीधी जीत' : '95%+ Direct Win'}
+              <div className="text-[9px] font-semibold text-slate-500 mt-0.5">
+                Direct Pass
               </div>
             </div>
 
-            {/* Level 2 Card (Target 2-Level Win) */}
-            <div className={`p-3 rounded-xl border text-center transition-all ${
+            {/* Level 2 Tab */}
+            <div className={`p-2.5 rounded-xl border text-center transition-all ${
               currentLevel === 2
-                ? 'bg-amber-500/20 border-amber-400 shadow-[0_0_25px_rgba(255,215,0,0.4)] ring-2 ring-amber-400/50'
-                : 'bg-black/40 border-white/10 opacity-60'
+                ? 'bg-amber-50 border-amber-500 text-amber-950 ring-2 ring-amber-400/50 shadow-sm'
+                : 'bg-slate-50 border-slate-200 text-slate-400 opacity-60'
             }`}>
-              <div className="flex items-center justify-center gap-1 text-[10px] font-black uppercase text-amber-300 mb-1">
-                <Zap className="h-3 w-3 text-amber-400" />
+              <div className="text-[10px] font-black uppercase flex items-center justify-center gap-1 mb-0.5">
+                <Zap className={`h-3 w-3 ${currentLevel === 2 ? 'text-amber-600' : 'text-slate-400'}`} />
                 <span>LEVEL 2</span>
               </div>
-              <div className="text-base font-mono font-black text-amber-300">
+              <div className={`text-xs font-black font-mono ${currentLevel === 2 ? 'text-amber-700' : 'text-slate-500'}`}>
                 2-LEVEL WIN
               </div>
-              <div className="text-[9px] text-amber-200/70 mt-0.5">
-                {lang === 'hi' ? '99%+ रिकवरी' : '99%+ Recovery'}
+              <div className="text-[9px] font-semibold text-slate-500 mt-0.5">
+                Auto Recovery
               </div>
             </div>
 
-            {/* Level 3 Card (All Wallet Mode) */}
-            <div className={`p-3 rounded-xl border text-center transition-all ${
+            {/* Level 3 Tab */}
+            <div className={`p-2.5 rounded-xl border text-center transition-all ${
               currentLevel === 3
-                ? 'bg-red-500/20 border-red-500 shadow-[0_0_30px_rgba(255,0,60,0.5)] ring-2 ring-red-500/60 animate-pulse'
-                : 'bg-black/40 border-white/10 opacity-60'
+                ? 'bg-rose-50 border-rose-500 text-rose-950 ring-2 ring-rose-400/50 shadow-sm'
+                : 'bg-slate-50 border-slate-200 text-slate-400 opacity-60'
             }`}>
-              <div className="flex items-center justify-center gap-1 text-[10px] font-black uppercase text-red-400 mb-1">
-                <Wallet className="h-3 w-3 text-red-400" />
+              <div className="text-[10px] font-black uppercase flex items-center justify-center gap-1 mb-0.5">
+                <Wallet className={`h-3 w-3 ${currentLevel === 3 ? 'text-rose-600' : 'text-slate-400'}`} />
                 <span>LEVEL 3</span>
               </div>
-              <div className="text-base font-mono font-black text-red-400">
+              <div className={`text-xs font-black font-mono ${currentLevel === 3 ? 'text-rose-700' : 'text-slate-500'}`}>
                 ALL WALLET
               </div>
-              <div className="text-[9px] text-red-200/70 mt-0.5">
-                {lang === 'hi' ? 'फुल वॉलेट जैकपॉट' : 'Full Wallet Max'}
+              <div className="text-[9px] font-semibold text-slate-500 mt-0.5">
+                Full Surge
               </div>
             </div>
           </div>
         </div>
 
-        {/* 2. Live Period & Timer Countdown Bar */}
-        <div className={`rounded-2xl border p-4 backdrop-blur-xl transition-all duration-300 ${
-          isCritical
-            ? 'border-red-500/80 bg-red-950/40 shadow-[0_0_30px_rgba(255,0,0,0.3)]'
-            : 'border-white/10 bg-[#0a0f1d]/90 shadow-lg'
-        }`}>
-          <div className="flex items-center justify-between">
-            {/* Period Section */}
-            <div>
-              <div className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-gray-400 mb-0.5">
-                <Radio className="h-3.5 w-3.5 text-amber-400 animate-pulse" />
-                <span>{lang === 'hi' ? 'आने वाला पीरियड (Issue)' : 'UPCOMING PERIOD'}</span>
-              </div>
-              <div className="font-mono text-xl sm:text-2xl font-black tracking-widest text-white">
-                {currentUpcomingPeriod || 'LOADING...'}
-              </div>
+        {/* 3. PLAY GAME CARTOON BUTTON (Full-Screen In-App Game Page Launcher) */}
+        <button
+          onClick={() => {
+            sound.playClick();
+            setViewMode('game');
+          }}
+          className="group relative overflow-hidden rounded-2xl bg-gradient-to-r from-amber-400 via-amber-500 to-yellow-400 p-3.5 text-slate-950 font-black shadow-md hover:shadow-lg active:scale-[0.98] transition-all border border-amber-300 flex items-center justify-between"
+          id="open-game-page-btn"
+        >
+          <div className="flex items-center gap-3">
+            {/* Cartoon Game Character Badge */}
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white text-slate-900 shadow-md text-2xl group-hover:scale-110 transition-transform">
+              🎮
             </div>
-
-            {/* Countdown */}
-            <div className="text-right">
-              <div className="flex items-center justify-end gap-1 text-[11px] font-extrabold uppercase tracking-wider text-gray-400 mb-0.5">
-                <Clock className="h-3.5 w-3.5 text-amber-400" />
-                <span>{lang === 'hi' ? 'समय शेष' : 'COUNTDOWN'}</span>
-              </div>
-              <div className={`font-mono font-black text-2xl sm:text-3xl tracking-wider ${
-                isCritical ? 'text-red-500 animate-pulse' : 'text-amber-400'
-              }`}>
-                {timeFormatted}
-              </div>
-            </div>
-          </div>
-
-          {/* Progress Bar */}
-          <div className="w-full h-1.5 rounded-full mt-3 overflow-hidden bg-black/60 border border-white/10">
-            <div
-              className={`h-full rounded-full transition-all duration-300 ${
-                isCritical ? 'bg-red-500 shadow-[0_0_10px_#ef4444]' : 'bg-gradient-to-r from-amber-400 to-amber-600'
-              }`}
-              style={{ width: `${((60 - secondsRemaining) / 60) * 100}%` }}
-            />
-          </div>
-        </div>
-
-        {/* 3. 10-PERIOD LIVE DEEP PATTERN SCANNER */}
-        <div className="rounded-2xl border border-white/10 bg-[#0a0f1d]/90 p-3.5">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-gray-400">
-              <Activity className="h-3.5 w-3.5 text-amber-400" />
-              <span>{lang === 'hi' ? '10-पीरियड पैटर्न विश्लेषण' : '10-PERIOD PATTERN RADAR'}</span>
-            </div>
-            <span className="text-[10px] font-mono font-bold text-emerald-400">
-              Deep Neural Sync: Active
-            </span>
-          </div>
-
-          {/* 10 Dots Matrix */}
-          <div className="grid grid-cols-10 gap-1.5">
-            {(prediction?.last10Trend || ['BIG', 'SMALL', 'BIG', 'BIG', 'SMALL', 'SMALL', 'BIG', 'SMALL', 'BIG', 'BIG']).slice(0, 10).map((sz, idx) => (
-              <div
-                key={idx}
-                className={`py-1 rounded-lg text-center font-mono font-black text-[10px] border transition-all ${
-                  sz === 'BIG'
-                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-[0_0_8px_rgba(255,215,0,0.2)]'
-                    : 'bg-sky-500/20 text-sky-300 border-sky-500/40 shadow-[0_0_8px_rgba(14,165,233,0.2)]'
-                }`}
-                title={`Period -${idx + 1}: ${sz}`}
-              >
-                {sz === 'BIG' ? 'B' : 'S'}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* ════════════════════════════════════════════════════════════════
-            4. KRUSHNA VIP MASTER PREDICTION CARD (STRICT SAME-POOL NUMBERS)
-            ════════════════════════════════════════════════════════════════ */}
-        <div className="relative overflow-hidden rounded-3xl border-2 border-amber-400/50 bg-gradient-to-b from-[#151c30] via-[#0d1322] to-black p-5 sm:p-6 shadow-[0_0_60px_rgba(255,215,0,0.18)]">
-          
-          {/* Top Header */}
-          <div className="flex items-center justify-between pb-3.5 border-b border-white/10">
-            <div className="flex items-center gap-2">
-              <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-400 text-black font-black text-sm shadow-[0_0_15px_rgba(255,215,0,0.6)]">
-                ⚡
+            <div className="text-left">
+              <span className="text-xs font-extrabold uppercase tracking-wider text-amber-950/80 block">
+                BDG WIN OFFICIAL GAME
               </span>
-              <div>
-                <h2 className="font-black text-base sm:text-lg tracking-wide text-white flex items-center gap-1.5">
-                  <span>KRUSHNA VIP PREDICTION</span>
-                  <Crown className="h-4 w-4 text-amber-400 animate-pulse" />
-                </h2>
-                <p className="text-[10px] text-amber-300/80 font-bold uppercase tracking-wider">
-                  {prediction?.patternName || 'Under 2-Level Engine'}
-                </p>
-              </div>
+              <span className="text-sm sm:text-base font-black text-slate-950 flex items-center gap-1.5">
+                <span>गेम पेज खोलें (Play In-App)</span>
+                <Sparkles className="h-4 w-4 text-amber-900" />
+              </span>
             </div>
+          </div>
 
-            <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-black border ${
-              currentLevel === 3
-                ? 'bg-red-500/20 border-red-500 text-red-300 animate-pulse'
-                : 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
-            }`}>
-              <ShieldCheck className="h-3.5 w-3.5" />
-              {prediction?.confidence || 98.6}% {lang === 'hi' ? 'सटीकता' : 'CONF'}
+          <div className="flex items-center gap-1 bg-black/10 px-3 py-1.5 rounded-xl text-xs font-black">
+            <span>FULL SCREEN</span>
+            <Gamepad2 className="h-4 w-4" />
+          </div>
+        </button>
+
+        {/* 4. Live Period & Timer Bar */}
+        <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+          <div>
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block mb-0.5">
+              UPCOMING PERIOD (ISSUE)
+            </span>
+            <span className="font-mono text-lg sm:text-xl font-black tracking-wider text-slate-900">
+              {currentUpcomingPeriod || '------'}
             </span>
           </div>
 
-          {/* Center Result Area */}
-          <div className="my-4 flex flex-col items-center justify-center min-h-[160px]">
-            {isCalculating ? (
-              <div className="flex flex-col items-center justify-center py-6">
-                <div className="h-10 w-10 rounded-full border-3 border-amber-400 border-t-transparent animate-spin mb-3" />
-                <span className="font-mono text-xs font-bold tracking-widest text-amber-400 animate-pulse">
-                  {lang === 'hi' ? '2-लेवल विश्लेषण हो रहा है...' : 'ANALYZING 2-LEVEL PATTERN...'}
+          <div className="text-right">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 flex items-center justify-end gap-1 mb-0.5">
+              <Clock className="h-3 w-3 text-amber-500" />
+              TIME LEFT
+            </span>
+            <span className={`font-mono text-2xl font-black tracking-wider ${
+              isCritical ? 'text-rose-600 animate-pulse' : 'text-slate-900'
+            }`}>
+              {timeFormatted}
+            </span>
+          </div>
+        </div>
+
+        {/* 5. PREDICTION RESULT MESSAGE CARD (Clean, High Contrast, One Message View) */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-sm relative">
+          
+          {/* Header Bar */}
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div className="flex items-center gap-2">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-100 text-amber-800 font-black">
+                🎯
+              </div>
+              <div>
+                <span className="text-xs font-black uppercase tracking-wider text-slate-900 block">
+                  PREDICTION MESSAGE
+                </span>
+                <span className="text-[10px] text-slate-500 font-semibold">
+                  {prediction?.patternName || 'Under 2-Level Win'}
                 </span>
               </div>
-            ) : prediction ? (
-              <div className="w-full flex flex-col items-center gap-4">
-                
-                {/* Major Big / Small Visual Display */}
-                <div className={`w-full flex items-center justify-between gap-4 rounded-2xl border p-4 sm:p-5 transition-all ${
-                  isBig
-                    ? 'bg-gradient-to-r from-amber-500/20 via-orange-950/30 to-black border-amber-400 shadow-[0_0_30px_rgba(255,215,0,0.25)]'
-                    : 'bg-gradient-to-r from-sky-500/20 via-blue-950/30 to-black border-sky-400 shadow-[0_0_30px_rgba(14,165,233,0.25)]'
-                }`}>
-                  {/* Left: Size Name & Range */}
-                  <div className="flex items-center gap-3.5">
-                    <div className={`flex h-14 w-14 items-center justify-center rounded-2xl border shadow-lg ${
-                      isBig
-                        ? 'bg-amber-400 text-black border-amber-300 shadow-[0_0_25px_rgba(255,215,0,0.6)]'
-                        : 'bg-sky-400 text-black border-sky-300 shadow-[0_0_25px_rgba(14,165,233,0.6)]'
-                    }`}>
-                      {isBig ? <Flame className="h-8 w-8 animate-bounce" /> : <Snowflake className="h-8 w-8 animate-pulse" />}
-                    </div>
-
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className={`font-black text-3xl sm:text-4xl tracking-wider ${
-                          isBig ? 'text-amber-400 drop-shadow-[0_0_15px_rgba(255,215,0,0.6)]' : 'text-sky-400 drop-shadow-[0_0_15px_rgba(14,165,233,0.6)]'
-                        }`}>
-                          {prediction.size}
-                        </span>
-                        
-                        <span className={`px-2.5 py-0.5 rounded-md text-xs font-mono font-black border ${
-                          isBig
-                            ? 'bg-amber-500/20 text-amber-300 border-amber-400/50'
-                            : 'bg-sky-500/20 text-sky-300 border-sky-400/50'
-                        }`}>
-                          {isBig ? '5 - 9' : '0 - 4'}
-                        </span>
-                      </div>
-                      
-                      <span className="text-[11px] font-bold text-gray-300 uppercase tracking-wider block mt-0.5">
-                        {lang === 'hi' ? 'अग्रिम परिणाम (Target Size)' : 'Target Winning Size'}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Right: STRICT SAME-POOL TWIN BALLS (NO OPPOSITE NUMBERS) */}
-                  <div className="flex flex-col items-end">
-                    <span className="text-[9px] font-black uppercase tracking-wider text-amber-300 mb-1 flex items-center gap-1">
-                      <Sparkles className="h-3 w-3" />
-                      {lang === 'hi' ? 'जैकपॉट नंबर' : 'HOT TWIN BALLS'}
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <div className={`flex h-12 w-12 items-center justify-center rounded-2xl font-mono text-2xl font-black border-2 shadow-[0_0_20px_rgba(255,215,0,0.4)] ${
-                        isBig
-                          ? 'bg-gradient-to-b from-amber-400/30 to-black border-amber-400 text-amber-300'
-                          : 'bg-gradient-to-b from-sky-400/30 to-black border-sky-400 text-sky-300'
-                      }`}>
-                        {prediction.n1}
-                      </div>
-
-                      <div className={`flex h-12 w-12 items-center justify-center rounded-2xl font-mono text-2xl font-black border-2 shadow-[0_0_20px_rgba(255,215,0,0.4)] ${
-                        isBig
-                          ? 'bg-gradient-to-b from-amber-400/30 to-black border-amber-400 text-amber-300'
-                          : 'bg-gradient-to-b from-sky-400/30 to-black border-sky-400 text-sky-300'
-                      }`}>
-                        {prediction.n2}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Sub-bar: Complete Size Numbers Strip */}
-                <div className="w-full flex items-center justify-between bg-black/60 border border-white/10 rounded-xl px-3 py-2 text-xs">
-                  <span className="text-gray-400 font-bold text-[11px]">
-                    {lang === 'hi' ? 'संबंधित नंबर पूल:' : 'Linked Size Cluster:'}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    {prediction.companionNumbers.map((num) => (
-                      <span
-                        key={num}
-                        className={`font-mono font-black text-xs px-2.5 py-1 rounded-lg ${
-                          num === prediction.n1 || num === prediction.n2
-                            ? 'bg-amber-400 text-black font-black shadow-[0_0_10px_rgba(255,215,0,0.6)]'
-                            : 'bg-white/5 text-gray-300 border border-white/10'
-                        }`}
-                      >
-                        {num}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-              </div>
-            ) : null}
-          </div>
-        </div>
-
-        {/* 5. SCORECARD: L1 WINS / L2 WINS / ALL WALLET WINS / UNDER 2-LEVEL WIN RATE */}
-        <div className="grid grid-cols-4 gap-2">
-          <div className="rounded-2xl border border-emerald-500/30 bg-emerald-950/20 p-2.5 text-center shadow-sm">
-            <span className="text-[10px] font-bold text-gray-400 block uppercase">
-              {lang === 'hi' ? 'L1 जीत (Direct)' : 'L1 WINS'}
-            </span>
-            <span className="font-mono text-xl font-black text-emerald-400">
-              {l1Wins}
-            </span>
-          </div>
-
-          <div className="rounded-2xl border border-amber-500/40 bg-amber-950/20 p-2.5 text-center shadow-sm">
-            <span className="text-[10px] font-bold text-amber-300 block uppercase">
-              {lang === 'hi' ? 'L2 जीत (2-Level)' : 'L2 WINS'}
-            </span>
-            <span className="font-mono text-xl font-black text-amber-300">
-              {l2Wins}
-            </span>
-          </div>
-
-          <div className="rounded-2xl border border-red-500/30 bg-red-950/20 p-2.5 text-center shadow-sm">
-            <span className="text-[10px] font-bold text-red-400 block uppercase">
-              {lang === 'hi' ? 'L3 वॉलेट जीत' : 'L3 WALLET'}
-            </span>
-            <span className="font-mono text-xl font-black text-red-400">
-              {l3Wins}
-            </span>
-          </div>
-
-          <div className="rounded-2xl border border-cyan-500/30 bg-cyan-950/20 p-2.5 text-center shadow-sm">
-            <span className="text-[10px] font-bold text-cyan-300 block uppercase">
-              {lang === 'hi' ? '2-लेवल दर' : '2-LVL RATE'}
-            </span>
-            <span className="font-mono text-xl font-black text-cyan-300">
-              {under2LevelAccuracy}%
-            </span>
-          </div>
-        </div>
-
-        {/* 6. Live Verification History (Strictly Real Live Rounds) */}
-        <div className="rounded-2xl border border-white/10 bg-[#0a0f1d]/90 p-4 backdrop-blur-xl shadow-lg">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-gray-300">
-              <History className="h-3.5 w-3.5 text-amber-400" />
-              <span>{lang === 'hi' ? 'लाइव सत्यापित इतिहास' : 'LIVE VERIFIED HISTORY'}</span>
             </div>
-            <span className="text-[11px] font-bold text-emerald-400">
-              {lang === 'hi' ? '100% सत्यापित राउंड्स' : '100% VERIFIED DRAWS'}
+            
+            <span className="text-[11px] font-mono font-black px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1">
+              <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+              {prediction?.confidence || 98.6}% CONF
+            </span>
+          </div>
+
+          {/* Message Body */}
+          {isCalculating ? (
+            <div className="py-8 text-center flex flex-col items-center justify-center">
+              <div className="h-7 w-7 rounded-full border-2 border-amber-500 border-t-transparent animate-spin mb-2" />
+              <span className="text-xs font-mono font-bold text-slate-600">
+                Calculating Next Prediction...
+              </span>
+            </div>
+          ) : prediction ? (
+            <div className="pt-3.5 flex flex-col gap-3">
+              
+              {/* Main Size & Hot Numbers Box */}
+              <div className={`flex items-center justify-between rounded-xl border p-3.5 ${
+                isBig
+                  ? 'bg-amber-50/60 border-amber-300 text-amber-950'
+                  : 'bg-sky-50/60 border-sky-300 text-sky-950'
+              }`}>
+                {/* Size Badge */}
+                <div className="flex items-center gap-3">
+                  <div className={`flex h-12 w-12 items-center justify-center rounded-xl font-black text-white shadow-md ${
+                    isBig ? 'bg-amber-500' : 'bg-sky-500'
+                  }`}>
+                    {isBig ? <Flame className="h-7 w-7" /> : <Snowflake className="h-7 w-7" />}
+                  </div>
+                  <div>
+                    <span className={`text-3xl font-black tracking-wider block leading-none ${
+                      isBig ? 'text-amber-700' : 'text-sky-700'
+                    }`}>
+                      {prediction.size}
+                    </span>
+                    <span className="text-[11px] font-mono font-bold text-slate-600 mt-1 block">
+                      Range: {isBig ? '5 - 9' : '0 - 4'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Hot Twin Numbers */}
+                <div className="text-right">
+                  <span className="text-[10px] font-black uppercase text-slate-500 block mb-1">
+                    HOT NUMBERS
+                  </span>
+                  <div className="flex items-center gap-1.5 justify-end">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-white border border-slate-300 font-mono text-base font-black text-slate-900 shadow-sm">
+                      {prediction.n1}
+                    </span>
+                    <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-white border border-slate-300 font-mono text-base font-black text-slate-900 shadow-sm">
+                      {prediction.n2}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Single Message Alert Summary */}
+              <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs">
+                <span className="text-slate-600 font-bold">
+                  संबंधित नंबर:
+                </span>
+                <div className="flex items-center gap-1.5">
+                  {prediction.companionNumbers.map((num) => (
+                    <span
+                      key={num}
+                      className={`font-mono text-xs px-2 py-0.5 rounded-md font-bold ${
+                        num === prediction.n1 || num === prediction.n2
+                          ? 'bg-amber-400 text-slate-950 font-black shadow-xs'
+                          : 'bg-white text-slate-600 border border-slate-200'
+                      }`}
+                    >
+                      {num}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+            </div>
+          ) : null}
+        </div>
+
+        {/* 6. LIVE DRAWN RESULT HISTORY (White Theme) */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-slate-800">
+              <History className="h-3.5 w-3.5 text-amber-500" />
+              <span>Live Result History</span>
+            </div>
+            <span className="text-[10px] font-bold text-emerald-600">
+              100% Verified Draws
             </span>
           </div>
 
           {history.length === 0 ? (
-            <div className="py-8 text-center flex flex-col items-center justify-center border border-dashed rounded-xl border-white/10 bg-black/20">
-              <Radio className="h-7 w-7 text-amber-400 animate-pulse mb-2" />
-              <p className="text-xs font-bold text-gray-300">
-                {lang === 'hi' ? 'लाइव राउंड पूरा होने की प्रतीक्षा है...' : 'Waiting for live round to draw...'}
-              </p>
-              <p className="text-[10px] text-gray-500 mt-0.5">
-                {lang === 'hi' ? 'जैसे ही वर्तमान पीरियड का रिजल्ट आएगा, यहाँ L1/L2/L3 के साथ WIN/LOSS दर्ज होगा' : 'Results will appear live with played levels'}
-              </p>
+            <div className="py-6 text-center text-xs text-slate-400 border border-dashed rounded-xl border-slate-200">
+              Waiting for first live draw...
             </div>
           ) : (
-            <div className="divide-y divide-white/5 max-h-[320px] overflow-y-auto">
+            <div className="divide-y divide-slate-100 max-h-[300px] overflow-y-auto">
               {history.map((rec) => {
                 const recIsBig = rec.size === 'BIG';
                 const isJackpot = rec.resultStatus === 'JACKPOT';
@@ -735,66 +603,58 @@ export default function App() {
 
                 return (
                   <div key={rec.periodId} className="py-2.5 flex items-center justify-between text-xs">
-                    {/* Period & Level Badge */}
+                    {/* Period & Level */}
                     <div className="flex items-center gap-2">
                       <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-black ${
                         rec.levelPlayed === 1
-                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                          ? 'bg-emerald-100 text-emerald-800'
                           : rec.levelPlayed === 2
-                          ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                          : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                          ? 'bg-amber-100 text-amber-900'
+                          : 'bg-rose-100 text-rose-800'
                       }`}>
                         L{rec.levelPlayed ?? 1}
                       </span>
                       <div>
-                        <span className="font-mono font-bold block text-gray-200">
+                        <span className="font-mono font-bold text-slate-800 block">
                           #{rec.periodId.slice(-4)}
                         </span>
-                        <span className="text-[9px] text-gray-500 font-mono">
+                        <span className="text-[9px] text-slate-400 font-mono">
                           {rec.timeStr}
                         </span>
                       </div>
                     </div>
 
-                    {/* Drawn Number & Size */}
+                    {/* Number & Size */}
                     <div className="flex items-center gap-2">
-                      <span className="flex h-7 w-7 items-center justify-center rounded-lg font-mono text-sm font-black border bg-white/5 border-white/10 text-white">
+                      <span className="flex h-6 w-6 items-center justify-center rounded-md bg-slate-100 border border-slate-200 font-mono text-xs font-black text-slate-800">
                         {rec.number}
                       </span>
-
-                      {/* Size */}
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-black border ${
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-black ${
                         recIsBig
-                          ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                          : 'bg-sky-500/20 text-sky-300 border-sky-500/40'
+                          ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                          : 'bg-sky-100 text-sky-800 border border-sky-200'
                       }`}>
                         {rec.size}
                       </span>
                     </div>
 
-                    {/* Match status */}
-                    <div className={`flex items-center gap-1 font-black text-[11px] ${
-                      isJackpot
-                        ? 'text-amber-400 drop-shadow-[0_0_8px_rgba(255,215,0,0.6)]'
-                        : isWin
-                        ? 'text-emerald-400'
-                        : 'text-rose-400'
-                    }`}>
+                    {/* Result Status */}
+                    <div>
                       {isJackpot ? (
-                        <>
-                          <Sparkles className="h-4 w-4 text-amber-400 animate-spin" />
-                          <span>JACKPOT 🎰</span>
-                        </>
+                        <span className="inline-flex items-center gap-1 font-black text-amber-600 text-xs">
+                          <Sparkles className="h-3.5 w-3.5" />
+                          JACKPOT
+                        </span>
                       ) : isWin ? (
-                        <>
-                          <CheckCircle2 className="h-4 w-4" />
-                          <span>WIN</span>
-                        </>
+                        <span className="inline-flex items-center gap-1 font-black text-emerald-600 text-xs">
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                          WIN
+                        </span>
                       ) : (
-                        <>
-                          <XCircle className="h-4 w-4" />
-                          <span>LOSS</span>
-                        </>
+                        <span className="inline-flex items-center gap-1 font-black text-rose-500 text-xs">
+                          <XCircle className="h-3.5 w-3.5" />
+                          LOSS
+                        </span>
                       )}
                     </div>
                   </div>
@@ -803,7 +663,8 @@ export default function App() {
             </div>
           )}
         </div>
-      </main>
+
+      </div>
     </div>
   );
 }
