@@ -17,10 +17,13 @@ export interface ApiDrawItem {
   premium?: string;
 }
 
-// Fetch official WinGo 1M live history from server proxy or direct fallback
-export async function fetchLiveWinGoHistory(): Promise<ApiDrawItem[]> {
+// Fetch official WinGo live history from server proxy or direct fallback (Supports 30S & 1M)
+export async function fetchLiveWinGoHistory(type: '30s' | '1m' = '30s'): Promise<ApiDrawItem[]> {
+  const endpoint = type === '30s' ? '/api/wingo-30s' : '/api/wingo-1m';
+  const directType = type === '30s' ? 'WinGo_30S' : 'WinGo_1M';
+
   try {
-    const res = await fetch('/api/wingo-1m');
+    const res = await fetch(endpoint);
     if (res.ok) {
       const data = await res.json();
       if (data?.data?.list && Array.isArray(data.data.list) && data.data.list.length > 0) {
@@ -28,11 +31,11 @@ export async function fetchLiveWinGoHistory(): Promise<ApiDrawItem[]> {
       }
     }
   } catch (err) {
-    console.warn('Backend proxy fetch failed:', err);
+    console.warn(`Backend proxy ${type} fetch failed:`, err);
   }
 
   try {
-    const resDirect = await fetch(`https://draw.ar-lottery01.com/WinGo/WinGo_1M/GetHistoryIssuePage.json?pageSize=30&t=${Date.now()}`);
+    const resDirect = await fetch(`https://draw.ar-lottery01.com/WinGo/${directType}/GetHistoryIssuePage.json?pageSize=30&t=${Date.now()}`);
     if (resDirect.ok) {
       const data = await resDirect.json();
       if (data?.data?.list && Array.isArray(data.data.list) && data.data.list.length > 0) {
@@ -40,21 +43,21 @@ export async function fetchLiveWinGoHistory(): Promise<ApiDrawItem[]> {
       }
     }
   } catch (err) {
-    console.warn('Direct fetch failed:', err);
+    console.warn(`Direct ${directType} fetch failed:`, err);
   }
 
   return [];
 }
 
 // Calculate the next period ID from the last completed issue number
-export function getNextPeriodId(lastIssueNumber: string): string {
+export function getNextPeriodId(lastIssueNumber: string, intervalSeconds: number = 30): string {
   if (!lastIssueNumber) {
     const now = new Date();
     const y = now.getFullYear();
     const m = String(now.getMonth() + 1).padStart(2, '0');
     const d = String(now.getDate()).padStart(2, '0');
     const secOfDay = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
-    const roundNumber = Math.floor(secOfDay / 60) + 1;
+    const roundNumber = Math.floor(secOfDay / intervalSeconds) + 1;
     return `${y}${m}${d}1000${String(roundNumber).padStart(4, '0')}`;
   }
 
